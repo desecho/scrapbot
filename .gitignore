@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Build output
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
