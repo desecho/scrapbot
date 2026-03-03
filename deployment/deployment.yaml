@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scrapbot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scrapbot
+  template:
+    metadata:
+      labels:
+        app: scrapbot
+    spec:
+      terminationGracePeriodSeconds: 30
+      restartPolicy: Always
+      containers:
+        - name: scrapbot
+          image: ghcr.io/desecho/scrapbot:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: scrapbot
