@@ -9,17 +9,20 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"scrapbot/internal/timeview"
+	"scrapbot/internal/weather"
 )
 
 type Runner struct {
-	api         *tgbotapi.BotAPI
-	timeService *timeview.Service
+	api            *tgbotapi.BotAPI
+	timeService    *timeview.Service
+	weatherService *weather.Service
 }
 
-func NewRunner(api *tgbotapi.BotAPI, timeService *timeview.Service) *Runner {
+func NewRunner(api *tgbotapi.BotAPI, timeService *timeview.Service, weatherService *weather.Service) *Runner {
 	return &Runner{
-		api:         api,
-		timeService: timeService,
+		api:            api,
+		timeService:    timeService,
+		weatherService: weatherService,
 	}
 }
 
@@ -32,6 +35,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	if r.timeService == nil {
 		return errors.New("time service is nil")
+	}
+	if r.weatherService == nil {
+		return errors.New("weather service is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -52,7 +58,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				return nil
 			}
 
-			reply, shouldReply := r.handleMessage(update.Message)
+			reply, shouldReply := r.handleMessage(ctx, update.Message)
 			if !shouldReply {
 				continue
 			}
@@ -67,9 +73,12 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) handleMessage(msg *tgbotapi.Message) (string, bool) {
+func (r *Runner) handleMessage(ctx context.Context, msg *tgbotapi.Message) (string, bool) {
 	if msg == nil || msg.Text == "" || !msg.IsCommand() {
 		return "", false
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	switch commandName(msg) {
@@ -78,10 +87,22 @@ func (r *Runner) handleMessage(msg *tgbotapi.Message) (string, bool) {
 			return "", false
 		}
 		return r.timeService.FormatCurrentTimes(), true
+	case "weather":
+		if r == nil || r.weatherService == nil {
+			return "", false
+		}
+
+		reply, err := r.weatherService.FormatCurrentWeather(ctx)
+		if err != nil {
+			log.Printf("format weather: %v", err)
+			return "Unable to fetch weather right now.", true
+		}
+
+		return reply, true
 	case "":
 		return "", false
 	default:
-		return "Supported command: /time", true
+		return "Supported commands: /time, /weather", true
 	}
 }
 
