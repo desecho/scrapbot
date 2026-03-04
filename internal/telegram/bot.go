@@ -43,6 +43,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
+	commands := tgbotapi.NewSetMyCommands(
+		tgbotapi.BotCommand{Command: "time", Description: "Show current time in Astrakhan, Montreal, and Seattle"},
+		tgbotapi.BotCommand{Command: "weather", Description: "Show current weather in Astrakhan, Montreal, and Seattle"},
+		tgbotapi.BotCommand{Command: "help", Description: "Show available commands"},
+	)
+	if _, err := r.api.Request(commands); err != nil {
+		log.Printf("set commands menu: %v", err)
+	}
+
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 
@@ -99,10 +108,14 @@ func (r *Runner) handleMessage(ctx context.Context, msg *tgbotapi.Message) (stri
 		}
 
 		return reply, true
+	case "help":
+		return "/time — Show current time in Astrakhan, Montreal, and Seattle\n" +
+			"/weather — Show current weather in Astrakhan, Montreal, and Seattle\n" +
+			"/help — Show available commands", true
 	case "":
 		return "", false
 	default:
-		return "Supported commands: /time, /weather", true
+		return "Unknown command. Try /help to see available commands.", true
 	}
 }
 

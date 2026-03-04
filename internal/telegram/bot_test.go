@@ -108,6 +108,25 @@ func TestHandleMessageWeatherCommandReturnsErrorMessage(t *testing.T) {
 	}
 }
 
+func TestHandleMessageHelpCommand(t *testing.T) {
+	runner := newTestRunner(t)
+
+	got, ok := runner.handleMessage(context.Background(), commandMessage("/help"))
+	if !ok {
+		t.Fatal("handleMessage() ok = false, want true")
+	}
+
+	want := strings.Join([]string{
+		"/time — Show current time in Astrakhan, Montreal, and Seattle",
+		"/weather — Show current weather in Astrakhan, Montreal, and Seattle",
+		"/help — Show available commands",
+	}, "\n")
+
+	if got != want {
+		t.Fatalf("handleMessage() = %q, want %q", got, want)
+	}
+}
+
 func TestHandleMessageUnknownCommand(t *testing.T) {
 	runner := newTestRunner(t)
 
@@ -116,7 +135,7 @@ func TestHandleMessageUnknownCommand(t *testing.T) {
 		t.Fatal("handleMessage() ok = false, want true")
 	}
 
-	const want = "Supported commands: /time, /weather"
+	const want = "Unknown command. Try /help to see available commands."
 	if got != want {
 		t.Fatalf("handleMessage() = %q, want %q", got, want)
 	}
