@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"errors"
 	"fmt"
 	"net/http"
@@ -97,10 +98,10 @@ func (s *Service) fetchCurrentWeather(ctx context.Context, city string) (string,
 	}
 
 	return fmt.Sprintf(
-		"%s: %.1f\u00b0 (%.1f\u00b0) / %s",
+		"%s: %.0f\u00b0 (%.0f\u00b0) / %s",
 		payload.name,
-		payload.tempC,
-		payload.feelsLikeC,
+		math.Round(payload.tempC),
+		math.Round(payload.feelsLikeC),
 		payload.conditionText,
 	), nil
 }

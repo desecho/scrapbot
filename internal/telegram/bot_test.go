@@ -61,9 +61,9 @@ func TestHandleMessageWeatherCommand(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"Astrakhan: 5.5\u00b0 (3.2\u00b0) / Cloudy",
-		"Montreal: -2.0\u00b0 (-7.1\u00b0) / Clear",
-		"Seattle: 9.3\u00b0 (7.8\u00b0) / Light rain",
+		"Astrakhan: 6\u00b0 (3\u00b0) / Cloudy",
+		"Montreal: -2\u00b0 (-7\u00b0) / Clear",
+		"Seattle: 9\u00b0 (8\u00b0) / Light rain",
 	}, "\n")
 
 	if got != want {
@@ -80,9 +80,9 @@ func TestHandleMessageWeatherCommandWithBotName(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"Astrakhan: 5.5\u00b0 (3.2\u00b0) / Cloudy",
-		"Montreal: -2.0\u00b0 (-7.1\u00b0) / Clear",
-		"Seattle: 9.3\u00b0 (7.8\u00b0) / Light rain",
+		"Astrakhan: 6\u00b0 (3\u00b0) / Cloudy",
+		"Montreal: -2\u00b0 (-7\u00b0) / Clear",
+		"Seattle: 9\u00b0 (8\u00b0) / Light rain",
 	}, "\n")
 
 	if got != want {
