@@ -14,6 +14,8 @@ import (
 const (
 	currentWeatherURL = "https://api.weatherapi.com/v1/current.json"
 	defaultTimeout    = 5 * time.Second
+	maxRetries        = 3
+	retryBaseDelay    = 500 * time.Millisecond
 )
 
 // HTTPClient is the minimal client contract needed for WeatherAPI requests.
@@ -22,9 +24,11 @@ type HTTPClient interface {
 }
 
 type Service struct {
-	client HTTPClient
-	apiKey string
-	cities []string
+	client         HTTPClient
+	apiKey         string
+	cities         []string
+	maxRetries     int
+	retryBaseDelay time.Duration
 }
 
 func NewService(client HTTPClient, apiKey string) (*Service, error) {
@@ -37,9 +41,11 @@ func NewService(client HTTPClient, apiKey string) (*Service, error) {
 	}
 
 	return &Service{
-		client: client,
-		apiKey: apiKey,
-		cities: []string{"Astrakhan", "Montreal", "Seattle"},
+		client:         client,
+		apiKey:         apiKey,
+		cities:         []string{"Astrakhan", "Montreal", "Seattle"},
+		maxRetries:     maxRetries,
+		retryBaseDelay: retryBaseDelay,
 	}, nil
 }
 
@@ -71,6 +77,46 @@ func (s *Service) FormatCurrentWeather(ctx context.Context) (string, error) {
 }
 
 func (s *Service) fetchCurrentWeather(ctx context.Context, city string) (string, error) {
+	var lastErr error
+	for attempt := range s.maxRetries {
+		if attempt > 0 {
+			delay := s.retryBaseDelay * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return "", fmt.Errorf("fetch %s weather: %w", city, ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+
+		result, err := s.doFetch(ctx, city)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+
+		if !isRetryable(err) {
+			return "", err
+		}
+	}
+	return "", lastErr
+}
+
+type statusError struct {
+	code int
+	msg  string
+}
+
+func (e *statusError) Error() string { return e.msg }
+
+func isRetryable(err error) bool {
+	var se *statusError
+	if errors.As(err, &se) {
+		return se.code >= 500
+	}
+	return true // network errors are retryable
+}
+
+func (s *Service) doFetch(ctx context.Context, city string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentWeatherURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build %s request: %w", city, err)
@@ -89,7 +135,11 @@ func (s *Service) fetchCurrentWeather(ctx context.Context, city string) (string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("fetch %s weather: unexpected status %s", city, resp.Status)
+		err := &statusError{
+			code: resp.StatusCode,
+			msg:  fmt.Sprintf("fetch %s weather: unexpected status %s", city, resp.Status),
+		}
+		return "", err
 	}
 
 	payload, err := decodeCurrentWeather(resp)

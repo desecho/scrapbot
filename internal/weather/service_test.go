@@ -142,6 +142,42 @@ func TestFormatCurrentWeatherReturnsErrorOnIncompleteResponse(t *testing.T) {
 	}
 }
 
+func TestFetchRetriesOnTransientError(t *testing.T) {
+	calls := 0
+	service := newTestService(t, stubHTTPClient{
+		do: func(req *http.Request) (*http.Response, error) {
+			calls++
+			if calls <= 2 {
+				return nil, errors.New("network blip")
+			}
+			return jsonResponse(http.StatusOK, weatherPayload("Astrakhan", 5.0, 3.0, "Clear")), nil
+		},
+	})
+
+	_, err := service.FormatCurrentWeather(context.Background())
+	if err != nil {
+		t.Fatalf("FormatCurrentWeather() error = %v, want nil", err)
+	}
+}
+
+func TestFetchDoesNotRetryOn4xx(t *testing.T) {
+	calls := 0
+	service := newTestService(t, stubHTTPClient{
+		do: func(req *http.Request) (*http.Response, error) {
+			calls++
+			return jsonResponse(http.StatusUnauthorized, `{"error":"bad key"}`), nil
+		},
+	})
+
+	_, err := service.FormatCurrentWeather(context.Background())
+	if err == nil {
+		t.Fatal("FormatCurrentWeather() error = nil, want non-nil")
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 call for 4xx error, got %d", calls)
+	}
+}
+
 func newTestService(t *testing.T, client HTTPClient) *Service {
 	t.Helper()
 
@@ -149,6 +185,8 @@ func newTestService(t *testing.T, client HTTPClient) *Service {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
+
+	service.retryBaseDelay = 0
 
 	return service
 }
