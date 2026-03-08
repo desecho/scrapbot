@@ -73,7 +73,6 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 
 			message := tgbotapi.NewMessage(update.Message.Chat.ID, reply)
-			message.ReplyToMessageID = update.Message.MessageID
 
 			if _, err := r.api.Send(message); err != nil {
 				log.Printf("send reply: %v", err)
