@@ -3,11 +3,12 @@ package weather
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -63,14 +64,23 @@ func (s *Service) FormatCurrentWeather(ctx context.Context) (string, error) {
 		ctx = context.Background()
 	}
 
-	lines := make([]string, 0, len(s.cities))
-	for _, city := range s.cities {
-		line, err := s.fetchCurrentWeather(ctx, city)
+	lines := make([]string, len(s.cities))
+	errs := make([]error, len(s.cities))
+
+	var wg sync.WaitGroup
+	for i, city := range s.cities {
+		wg.Add(1)
+		go func(i int, city string) {
+			defer wg.Done()
+			lines[i], errs[i] = s.fetchCurrentWeather(ctx, city)
+		}(i, city)
+	}
+	wg.Wait()
+
+	for _, err := range errs {
 		if err != nil {
 			return "", err
 		}
-
-		lines = append(lines, line)
 	}
 
 	return strings.Join(lines, "\n"), nil

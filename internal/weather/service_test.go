@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -36,11 +37,16 @@ func TestNewServiceUsesDefaultHTTPClient(t *testing.T) {
 }
 
 func TestFormatCurrentWeather(t *testing.T) {
-	var requests []*http.Request
+	var (
+		mu       sync.Mutex
+		requests []*http.Request
+	)
 
 	service, err := NewService(stubHTTPClient{
 		do: func(req *http.Request) (*http.Response, error) {
+			mu.Lock()
 			requests = append(requests, req)
+			mu.Unlock()
 
 			switch req.URL.Query().Get("q") {
 			case "Astrakhan":
@@ -77,19 +83,23 @@ func TestFormatCurrentWeather(t *testing.T) {
 		t.Fatalf("FormatCurrentWeather() made %d requests, want 3", len(requests))
 	}
 
-	for index, city := range []string{"Astrakhan", "Montreal", "Seattle"} {
-		req := requests[index]
+	gotCities := make(map[string]bool)
+	for i, req := range requests {
 		if req.Method != http.MethodGet {
-			t.Fatalf("request %d method = %q, want %q", index, req.Method, http.MethodGet)
+			t.Fatalf("request %d method = %q, want %q", i, req.Method, http.MethodGet)
 		}
-		if gotCity := req.URL.Query().Get("q"); gotCity != city {
-			t.Fatalf("request %d q = %q, want %q", index, gotCity, city)
-		}
+		gotCities[req.URL.Query().Get("q")] = true
 		if gotKey := req.URL.Query().Get("key"); gotKey != "test-key" {
-			t.Fatalf("request %d key = %q, want %q", index, gotKey, "test-key")
+			t.Fatalf("request %d key = %q, want %q", i, gotKey, "test-key")
 		}
 		if gotAQI := req.URL.Query().Get("aqi"); gotAQI != "no" {
-			t.Fatalf("request %d aqi = %q, want %q", index, gotAQI, "no")
+			t.Fatalf("request %d aqi = %q, want %q", i, gotAQI, "no")
+		}
+	}
+
+	for _, city := range []string{"Astrakhan", "Montreal", "Seattle"} {
+		if !gotCities[city] {
+			t.Fatalf("missing request for city %q", city)
 		}
 	}
 }
@@ -143,14 +153,21 @@ func TestFormatCurrentWeatherReturnsErrorOnIncompleteResponse(t *testing.T) {
 }
 
 func TestFetchRetriesOnTransientError(t *testing.T) {
-	calls := 0
+	var (
+		mu       sync.Mutex
+		callsMap = make(map[string]int)
+	)
 	service := newTestService(t, stubHTTPClient{
 		do: func(req *http.Request) (*http.Response, error) {
-			calls++
-			if calls <= 2 {
+			city := req.URL.Query().Get("q")
+			mu.Lock()
+			callsMap[city]++
+			n := callsMap[city]
+			mu.Unlock()
+			if n <= 2 {
 				return nil, errors.New("network blip")
 			}
-			return jsonResponse(http.StatusOK, weatherPayload("Astrakhan", 5.0, 3.0, "Clear")), nil
+			return jsonResponse(http.StatusOK, weatherPayload(city, 5.0, 3.0, "Clear")), nil
 		},
 	})
 
@@ -161,10 +178,15 @@ func TestFetchRetriesOnTransientError(t *testing.T) {
 }
 
 func TestFetchDoesNotRetryOn4xx(t *testing.T) {
-	calls := 0
+	var (
+		mu    sync.Mutex
+		calls int
+	)
 	service := newTestService(t, stubHTTPClient{
 		do: func(req *http.Request) (*http.Response, error) {
+			mu.Lock()
 			calls++
+			mu.Unlock()
 			return jsonResponse(http.StatusUnauthorized, `{"error":"bad key"}`), nil
 		},
 	})
@@ -173,8 +195,12 @@ func TestFetchDoesNotRetryOn4xx(t *testing.T) {
 	if err == nil {
 		t.Fatal("FormatCurrentWeather() error = nil, want non-nil")
 	}
-	if calls != 1 {
-		t.Fatalf("expected 1 call for 4xx error, got %d", calls)
+	mu.Lock()
+	gotCalls := calls
+	mu.Unlock()
+	// Each city should make exactly 1 call (no retries for 4xx).
+	if gotCalls != len(service.cities) {
+		t.Fatalf("expected %d calls for 4xx error (one per city), got %d", len(service.cities), gotCalls)
 	}
 }
 
